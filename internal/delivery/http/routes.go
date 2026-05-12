@@ -47,11 +47,13 @@ func RegisterRoutes(
 	cs := auth.Group("/cs")
 	cs.Use(middleware.RBAC("cs"))
 	cs.GET("/tickets/open", h.CSListOpenTickets)
+	cs.GET("/tickets/my", h.CSListMyTickets)
 	cs.POST("/tickets/:ticket_id/claim", h.CSClaimTicket)
 
 	// CS endpoints yang butuh LP.
 	csTicket := cs.Group("/tickets/:ticket_id")
 	csTicket.Use(middleware.LeastPrivilegeTicketCS(ticketRepo))
+	csTicket.GET("", h.CSGetTicket)
 	csTicket.POST("/status", h.CSUpdateTicketStatus)
 	csTicket.GET("/messages", h.CSListMessages)
 	csTicket.POST("/messages", h.CSSendMessage)

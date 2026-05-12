@@ -45,6 +45,14 @@ func (u *TicketUsecase) ListOpenUnassigned(ctx context.Context) ([]domain.Ticket
 	return u.ticketRepo.ListOpenUnassigned(ctx)
 }
 
+func (u *TicketUsecase) GetByID(ctx context.Context, ticketID uint64) (*domain.Ticket, error) {
+	return u.ticketRepo.GetByID(ctx, ticketID)
+}
+
+func (u *TicketUsecase) ListMyActiveTicketsCS(ctx context.Context, csID uint64) ([]domain.Ticket, error) {
+	return u.ticketRepo.ListByCSIDActive(ctx, csID)
+}
+
 func (u *TicketUsecase) ClaimTicket(ctx context.Context, csID uint64, ticketID uint64) error {
 	// VALIDASI: customer support maksimal 2 tiket aktif (CLAIMED / IN_PROGRESS)
 	cnt, err := u.ticketRepo.CountActiveByCSID(ctx, csID)

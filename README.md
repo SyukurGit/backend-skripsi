@@ -45,6 +45,9 @@ Sesuai Clean Architecture:
 APP_PORT=8080
 JWT_SECRET=change_me_super_secret
 
+# Comma-separated. Use "*" only for local/dev.
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=root
@@ -117,7 +120,10 @@ Request:
 Middleware group: `JWT` + `RBAC(cs)`
 
 - GET `/cs/tickets/open`
-List ticket `OPEN` yang belum assigned.
+  List ticket `OPEN` yang belum assigned.
+
+- GET `/cs/tickets/my`
+  List ticket aktif milik CS (status `CLAIMED` / `IN_PROGRESS`).
 
 - POST `/cs/tickets/:ticket_id/claim`
 Validasi backend:
@@ -127,7 +133,10 @@ Catatan state machine:
 - setelah claim sukses, status ticket menjadi `CLAIMED`
 
 Endpoint berikut dilindungi Least Privilege middleware:
-Middleware tambahan: `LP` (assigned_cs_id harus sama dan status `CLAIMED`/`IN_PROGRESS`)
+Middleware tambahan: `LP` (assigned_cs_id harus sama)
+
+- GET `/cs/tickets/:ticket_id`
+  Ambil detail ticket (hanya jika ticket assigned ke CS).
 
 - POST `/cs/tickets/:ticket_id/status`
 Request:

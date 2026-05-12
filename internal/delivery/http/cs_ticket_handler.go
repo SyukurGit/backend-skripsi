@@ -23,6 +23,41 @@ func (h *HTTPHandler) CSListOpenTickets(c *gin.Context) {
 	c.JSON(code, body)
 }
 
+func (h *HTTPHandler) CSListMyTickets(c *gin.Context) {
+	csID := middleware.MustGetUserID(c)
+	items, err := h.ticketUC.ListMyActiveTicketsCS(c.Request.Context(), csID)
+	if err != nil {
+		code, body := response.Error(http.StatusInternalServerError, "gagal list ticket")
+		c.JSON(code, body)
+		return
+	}
+	code, body := response.OK("ok", items)
+	c.JSON(code, body)
+}
+
+func (h *HTTPHandler) CSGetTicket(c *gin.Context) {
+	ticketID, err := strconv.ParseUint(c.Param("ticket_id"), 10, 64)
+	if err != nil {
+		code, body := response.Error(http.StatusBadRequest, "ticket_id tidak valid")
+		c.JSON(code, body)
+		return
+	}
+	// LP sudah divalidasi oleh middleware.
+	t, err := h.ticketUC.GetByID(c.Request.Context(), ticketID)
+	if err != nil {
+		code, body := response.Error(http.StatusInternalServerError, "gagal ambil ticket")
+		c.JSON(code, body)
+		return
+	}
+	if t == nil {
+		code, body := response.Error(http.StatusNotFound, "ticket tidak ditemukan")
+		c.JSON(code, body)
+		return
+	}
+	code, body := response.OK("ok", t)
+	c.JSON(code, body)
+}
+
 func (h *HTTPHandler) CSClaimTicket(c *gin.Context) {
 	csID := middleware.MustGetUserID(c)
 	ticketID, err := strconv.ParseUint(c.Param("ticket_id"), 10, 64)

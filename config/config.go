@@ -11,6 +11,8 @@ type Config struct {
 	AppPort   string
 	JWTSecret string
 
+	CORSAllowedOrigins string
+
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -22,8 +24,9 @@ func Load() Config {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		AppPort:   getEnv("APP_PORT", "8080"),
-		JWTSecret: getEnv("JWT_SECRET", "dev_secret_change_me"),
+		AppPort:            getEnv("APP_PORT", "8080"),
+		JWTSecret:          getEnv("JWT_SECRET", "dev_secret_change_me"),
+		CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"),
 
 		DBHost:     getEnv("DB_HOST", "127.0.0.1"),
 		DBPort:     getEnv("DB_PORT", "3306"),

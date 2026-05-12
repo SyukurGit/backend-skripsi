@@ -56,9 +56,11 @@ User (JWT + RBAC user):
 
 CS (JWT + RBAC cs):
 - `GET /cs/tickets/open` (ticket OPEN yang belum assigned)
+- `GET /cs/tickets/my` (ticket aktif milik CS: CLAIMED/IN_PROGRESS)
 - `POST /cs/tickets/:ticket_id/claim`
 
 CS ticket group (JWT + RBAC cs + LP middleware):
+- `GET /cs/tickets/:ticket_id`
 - `POST /cs/tickets/:ticket_id/status`
 - `GET /cs/tickets/:ticket_id/messages?limit=...`
 - `POST /cs/tickets/:ticket_id/messages`

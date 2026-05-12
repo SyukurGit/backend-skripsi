@@ -60,6 +60,7 @@ func (u *MessageUsecase) SendMessage(ctx context.Context, senderID uint64, sende
 
 	// Push real-time ke room ticket.
 	u.chatPub.PublishTicketMessage(ticketID, map[string]any{
+		"id":          m.ID,
 		"ticket_id":   ticketID,
 		"sender_id":   senderID,
 		"sender_role": senderRole,

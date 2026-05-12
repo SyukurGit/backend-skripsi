@@ -10,8 +10,8 @@ import (
 	"support-backend/pkg/response"
 )
 
-// LeastPrivilegeTicketCS melakukan validasi bahwa CS hanya bisa akses tiket miliknya
-// dan status tiket harus CLAIMED atau IN_PROGRESS.
+// LeastPrivilegeTicketCS melakukan validasi bahwa CS hanya bisa akses tiket miliknya.
+// Catatan: pembatasan status (mis. chat hanya untuk ticket aktif) divalidasi di usecase/handler terkait.
 func LeastPrivilegeTicketCS(ticketRepo domain.TicketRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := MustGetRole(c)
@@ -47,14 +47,6 @@ func LeastPrivilegeTicketCS(ticketRepo domain.TicketRepository) gin.HandlerFunc 
 		// VALIDASI: memastikan CS hanya bisa akses tiket miliknya
 		if t.AssignedCSID == nil || *t.AssignedCSID != csID {
 			code, body := response.Error(http.StatusForbidden, "akses ditolak")
-			c.JSON(code, body)
-			c.Abort()
-			return
-		}
-
-		// VALIDASI: status ticket harus CLAIMED atau IN_PROGRESS
-		if t.Status != domain.TicketStatusClaimed && t.Status != domain.TicketStatusInProgress {
-			code, body := response.Error(http.StatusForbidden, "status ticket tidak mengizinkan")
 			c.JSON(code, body)
 			c.Abort()
 			return

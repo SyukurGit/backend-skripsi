@@ -9,6 +9,7 @@ import (
 	"support-backend/database"
 	"support-backend/internal/delivery/http"
 	wsdelivery "support-backend/internal/delivery/websocket"
+	"support-backend/internal/middleware"
 	"support-backend/internal/repository/mysql"
 	"support-backend/internal/usecase"
 )
@@ -53,6 +54,7 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(middleware.CORS(cfg))
 	// Keamanan: jangan percaya semua proxy secara default.
 	_ = r.SetTrustedProxies(nil)
 
