@@ -19,11 +19,13 @@ func RegisterRoutes(
 	jitUC *usecase.JITUsecase,
 	auditUC *usecase.AuditUsecase,
 	csUC *usecase.CSUsecase,
+	adminUC *usecase.AdminUsecase,
 	ticketRepo domain.TicketRepository,
 	chatHub *websocket.ChatHub,
 	auditHub *websocket.AuditHub,
+	terminalHub *websocket.TerminalHub,
 ) {
-	h := NewHTTPHandler(cfg, authUC, ticketUC, messageUC, jitUC, auditUC, csUC)
+	h := NewHTTPHandler(cfg, authUC, ticketUC, messageUC, jitUC, auditUC, csUC, adminUC)
 
 	r.GET("/health", h.Health)
 	r.POST("/auth/login", h.Login)
@@ -31,6 +33,7 @@ func RegisterRoutes(
 	// WebSocket (auth dilakukan di handler, tidak boleh bypass).
 	r.GET("/ws/chat/:ticket_id", websocket.ChatWSHandler(cfg, messageUC, ticketRepo, chatHub))
 	r.GET("/ws/audit", websocket.AuditWSHandler(cfg, auditHub))
+	r.GET("/ws/admin/terminal/:ticket_id", websocket.TerminalWSHandler(cfg, terminalHub))
 
 	auth := r.Group("/")
 	auth.Use(middleware.JWTAuth(cfg))
@@ -42,6 +45,7 @@ func RegisterRoutes(
 	user.GET("/tickets", h.UserListTickets)
 	user.POST("/tickets/:ticket_id/close", h.UserCloseTicket)
 	user.GET("/tickets/:ticket_id/messages", h.UserListMessages)
+	user.GET("/tickets/:ticket_id/activity", h.UserTicketActivity)
 	user.POST("/tickets/:ticket_id/messages", h.UserSendMessage)
 
 	cs := auth.Group("/cs")
@@ -69,5 +73,12 @@ func RegisterRoutes(
 
 	admin := auth.Group("/admin")
 	admin.Use(middleware.RBAC("admin"))
+	admin.GET("/dashboard", h.AdminDashboardStats)
 	admin.GET("/audit-logs", h.AdminListAuditLogs)
+	admin.GET("/sessions", h.AdminListSessions)
+	admin.GET("/sessions/:ticket_id", h.AdminSessionDetail)
+	admin.GET("/terminal/tickets", h.AdminListTerminalTickets)
+	admin.GET("/terminal/tickets/:ticket_id/logs", h.AdminListTerminalLogs)
+	admin.GET("/users", h.AdminListUsers)
+	admin.POST("/users", h.AdminCreateUser)
 }

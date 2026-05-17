@@ -12,7 +12,6 @@ import (
 
 func (h *HTTPHandler) CSViewTicketUserProfile(c *gin.Context) {
 	csID := middleware.MustGetUserID(c)
-	role := middleware.MustGetRole(c)
 	ticketID, _ := strconv.ParseUint(c.Param("ticket_id"), 10, 64)
 
 	p, err := h.csUC.ViewUserProfileByTicket(c.Request.Context(), csID, ticketID)
@@ -22,7 +21,6 @@ func (h *HTTPHandler) CSViewTicketUserProfile(c *gin.Context) {
 		return
 	}
 
-	_ = h.auditUC.Log(c.Request.Context(), csID, role, "VIEW_KYC", &ticketID, nil)
 	code, body := response.OK("ok", p)
 	c.JSON(code, body)
 }

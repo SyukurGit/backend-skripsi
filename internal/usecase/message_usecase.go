@@ -13,14 +13,15 @@ var (
 )
 
 type MessageUsecase struct {
-	ticketRepo domain.TicketRepository
-	msgRepo    domain.MessageRepository
-	auditUC    *AuditUsecase
-	chatPub    domain.ChatEventPublisher
+	ticketRepo  domain.TicketRepository
+	msgRepo     domain.MessageRepository
+	auditUC     *AuditUsecase
+	chatPub     domain.ChatEventPublisher
+	terminalPub domain.TerminalLogPublisher
 }
 
-func NewMessageUsecase(ticketRepo domain.TicketRepository, msgRepo domain.MessageRepository, auditUC *AuditUsecase, chatPub domain.ChatEventPublisher) *MessageUsecase {
-	return &MessageUsecase{ticketRepo: ticketRepo, msgRepo: msgRepo, auditUC: auditUC, chatPub: chatPub}
+func NewMessageUsecase(ticketRepo domain.TicketRepository, msgRepo domain.MessageRepository, auditUC *AuditUsecase, chatPub domain.ChatEventPublisher, terminalPub domain.TerminalLogPublisher) *MessageUsecase {
+	return &MessageUsecase{ticketRepo: ticketRepo, msgRepo: msgRepo, auditUC: auditUC, chatPub: chatPub, terminalPub: terminalPub}
 }
 
 func (u *MessageUsecase) SendMessage(ctx context.Context, senderID uint64, senderRole string, ticketID uint64, text string) (*domain.Message, error) {
@@ -69,6 +70,7 @@ func (u *MessageUsecase) SendMessage(ctx context.Context, senderID uint64, sende
 	})
 
 	_ = u.auditUC.Log(ctx, senderID, senderRole, "MESSAGE_SEND", &ticketID, nil)
+	u.publishTerminal(ticketID, "INFO", "message_usecase", "chat message accepted by backend from role="+senderRole)
 	return &m, nil
 }
 
@@ -103,4 +105,11 @@ func (u *MessageUsecase) ListMessages(ctx context.Context, requesterID uint64, r
 	}
 
 	return u.msgRepo.ListByTicketID(ctx, ticketID, limit)
+}
+
+func (u *MessageUsecase) publishTerminal(ticketID uint64, level, source, message string) {
+	if u.terminalPub == nil {
+		return
+	}
+	u.terminalPub.PublishTicketTerminal(ticketID, domain.TerminalLogEntry{TicketID: ticketID, Timestamp: time.Now(), Level: level, Source: source, Message: message})
 }

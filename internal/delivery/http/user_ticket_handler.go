@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -105,5 +106,61 @@ func (h *HTTPHandler) UserListMessages(c *gin.Context) {
 		return
 	}
 	code, body := response.OK("ok", items)
+	c.JSON(code, body)
+}
+
+func (h *HTTPHandler) UserTicketActivity(c *gin.Context) {
+	userID := middleware.MustGetUserID(c)
+	ticketID, err := strconv.ParseUint(c.Param("ticket_id"), 10, 64)
+	if err != nil {
+		code, body := response.Error(http.StatusBadRequest, "ticket_id tidak valid")
+		c.JSON(code, body)
+		return
+	}
+
+	t, err := h.ticketUC.GetByID(c.Request.Context(), ticketID)
+	if err != nil {
+		code, body := response.Error(http.StatusInternalServerError, "gagal ambil ticket")
+		c.JSON(code, body)
+		return
+	}
+	if t == nil || t.UserID != userID {
+		code, body := response.Error(http.StatusForbidden, "tidak bisa akses aktivitas ticket")
+		c.JSON(code, body)
+		return
+	}
+
+	items, err := h.auditUC.List(c.Request.Context(), "", 200)
+	if err != nil {
+		code, body := response.Error(http.StatusInternalServerError, "gagal ambil aktivitas ticket")
+		c.JSON(code, body)
+		return
+	}
+
+	allowed := []string{
+		"TICKET_CLAIM",
+		"TICKET_STATUS_UPDATE",
+		"MESSAGE_SEND",
+		"JIT_REQUEST",
+		"VIEW_KYC",
+		"RESET_PASSWORD",
+		"CHANGE_EMAIL",
+		"UNBLOCK_ACCOUNT",
+		"RESET_PIN",
+		"JIT_REVOKE_TICKET_CLOSED",
+	}
+
+	filtered := make([]domain.AuditLog, 0)
+	for _, item := range items {
+		if item.TicketID == nil || *item.TicketID != ticketID {
+			continue
+		}
+		if !slices.Contains(allowed, item.Action) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+
+	code, body := response.OK("ok", filtered)
 	c.JSON(code, body)
 }

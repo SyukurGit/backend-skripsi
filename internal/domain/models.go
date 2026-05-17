@@ -61,8 +61,11 @@ type AuditLog struct {
 
 // View DTO untuk kebijakan exposure data.
 type UserProfileMaskedView struct {
-	UserID  uint64         `json:"user_id"`
-	Phone   string         `json:"phone"`
-	Balance int64          `json:"balance"`
-	KYCData datatypes.JSON `json:"kyc_data"`
+	UserID         uint64         `json:"user_id"`
+	Phone          string         `json:"phone"`
+	Balance        int64          `json:"balance"`
+	KYCData        datatypes.JSON `json:"kyc_data"`
+	ExposureState  string         `json:"exposure_state"`
+	PolicyNote     string         `json:"policy_note"`
+	GrantedFeature string         `json:"granted_feature,omitempty"`
 }

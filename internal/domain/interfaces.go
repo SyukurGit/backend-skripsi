@@ -10,12 +10,16 @@ import (
 type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByID(ctx context.Context, id uint64) (*User, error)
+	List(ctx context.Context) ([]User, error)
+	CountByRole(ctx context.Context, role string) (int64, error)
+	Create(ctx context.Context, u *User) error
 	UpdateEmail(ctx context.Context, userID uint64, newEmail string) error
 	UpdatePassword(ctx context.Context, userID uint64, newHashedPassword string) error
 }
 
 type UserProfileRepository interface {
 	GetByUserID(ctx context.Context, userID uint64) (*UserProfile, error)
+	Create(ctx context.Context, p *UserProfile) error
 	UpdateKYCData(ctx context.Context, userID uint64, kyc datatypes.JSON) error
 }
 
@@ -24,8 +28,10 @@ type TicketRepository interface {
 	GetByID(ctx context.Context, id uint64) (*Ticket, error)
 	ListByUserID(ctx context.Context, userID uint64) ([]Ticket, error)
 	ListOpenUnassigned(ctx context.Context) ([]Ticket, error)
+	ListByStatuses(ctx context.Context, statuses ...string) ([]Ticket, error)
 	ListByCSIDActive(ctx context.Context, csID uint64) ([]Ticket, error)
 	CountActiveByCSID(ctx context.Context, csID uint64) (int64, error)
+	CountByStatuses(ctx context.Context, statuses ...string) (int64, error)
 	AssignToCS(ctx context.Context, ticketID uint64, csID uint64) error
 	UpdateStatus(ctx context.Context, ticketID uint64, status string) error
 }
@@ -47,6 +53,7 @@ type JITSessionRepository interface {
 type AuditLogRepository interface {
 	Create(ctx context.Context, a *AuditLog) error
 	List(ctx context.Context, level string, limit int) ([]AuditLog, error)
+	ListByTicketID(ctx context.Context, ticketID uint64, limit int) ([]AuditLog, error)
 }
 
 type ChatEventPublisher interface {
@@ -55,4 +62,9 @@ type ChatEventPublisher interface {
 
 type AuditEventPublisher interface {
 	PublishAdminAudit(payload any)
+}
+
+type TerminalLogPublisher interface {
+	PublishTicketTerminal(ticketID uint64, payload any)
+	ListTicketTerminal(ticketID uint64, limit int) []TerminalLogEntry
 }

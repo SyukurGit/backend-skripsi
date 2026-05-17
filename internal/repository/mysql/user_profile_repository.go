@@ -30,6 +30,10 @@ func (r *UserProfileRepository) GetByUserID(ctx context.Context, userID uint64) 
 	return &p, nil
 }
 
+func (r *UserProfileRepository) Create(ctx context.Context, p *domain.UserProfile) error {
+	return r.db.WithContext(ctx).Create(p).Error
+}
+
 func (r *UserProfileRepository) UpdateKYCData(ctx context.Context, userID uint64, kyc datatypes.JSON) error {
 	return r.db.WithContext(ctx).Model(&domain.UserProfile{}).Where("user_id = ?", userID).Update("kyc_data", kyc).Error
 }

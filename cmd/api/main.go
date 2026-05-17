@@ -39,18 +39,22 @@ func main() {
 
 	auditHub := wsdelivery.NewAuditHub()
 	chatHub := wsdelivery.NewChatHub()
+	terminalHub := wsdelivery.NewTerminalHub()
 	go auditHub.Run()
 	go chatHub.Run()
+	go terminalHub.Run()
 
 	auditPublisher := wsdelivery.NewAuditPublisher(auditHub)
 	chatPublisher := wsdelivery.NewChatPublisher(chatHub)
+	terminalPublisher := wsdelivery.NewTerminalPublisher(terminalHub)
 
 	auditUC := usecase.NewAuditUsecase(auditRepo, auditPublisher)
 	authUC := usecase.NewAuthUsecase(userRepo, profileRepo, cfg)
-	ticketUC := usecase.NewTicketUsecase(ticketRepo, jitRepo, auditUC)
-	messageUC := usecase.NewMessageUsecase(ticketRepo, messageRepo, auditUC, chatPublisher)
-	jitUC := usecase.NewJITUsecase(ticketRepo, jitRepo, auditUC)
-	csUC := usecase.NewCSUsecase(userRepo, profileRepo, ticketRepo, jitUC, auditUC)
+	ticketUC := usecase.NewTicketUsecase(ticketRepo, jitRepo, auditUC, terminalPublisher)
+	messageUC := usecase.NewMessageUsecase(ticketRepo, messageRepo, auditUC, chatPublisher, terminalPublisher)
+	jitUC := usecase.NewJITUsecase(ticketRepo, jitRepo, auditUC, messageRepo, chatPublisher, terminalPublisher)
+	csUC := usecase.NewCSUsecase(userRepo, profileRepo, ticketRepo, messageRepo, chatPublisher, jitUC, auditUC, terminalPublisher)
+	adminUC := usecase.NewAdminUsecase(userRepo, profileRepo, ticketRepo, auditRepo, terminalPublisher)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -58,7 +62,7 @@ func main() {
 	// Keamanan: jangan percaya semua proxy secara default.
 	_ = r.SetTrustedProxies(nil)
 
-	http.RegisterRoutes(r, cfg, authUC, ticketUC, messageUC, jitUC, auditUC, csUC, ticketRepo, chatHub, auditHub)
+	http.RegisterRoutes(r, cfg, authUC, ticketUC, messageUC, jitUC, auditUC, csUC, adminUC, ticketRepo, chatHub, auditHub, terminalHub)
 
 	addr := ":" + cfg.AppPort
 	log.Printf("server listen %s", addr)

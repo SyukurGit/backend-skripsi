@@ -19,13 +19,14 @@ var (
 )
 
 type TicketUsecase struct {
-	ticketRepo domain.TicketRepository
-	jitRepo    domain.JITSessionRepository
-	auditUC    *AuditUsecase
+	ticketRepo  domain.TicketRepository
+	jitRepo     domain.JITSessionRepository
+	auditUC     *AuditUsecase
+	terminalPub domain.TerminalLogPublisher
 }
 
-func NewTicketUsecase(ticketRepo domain.TicketRepository, jitRepo domain.JITSessionRepository, auditUC *AuditUsecase) *TicketUsecase {
-	return &TicketUsecase{ticketRepo: ticketRepo, jitRepo: jitRepo, auditUC: auditUC}
+func NewTicketUsecase(ticketRepo domain.TicketRepository, jitRepo domain.JITSessionRepository, auditUC *AuditUsecase, terminalPub domain.TerminalLogPublisher) *TicketUsecase {
+	return &TicketUsecase{ticketRepo: ticketRepo, jitRepo: jitRepo, auditUC: auditUC, terminalPub: terminalPub}
 }
 
 func (u *TicketUsecase) CreateTicket(ctx context.Context, userID uint64) (*domain.Ticket, error) {
@@ -34,6 +35,7 @@ func (u *TicketUsecase) CreateTicket(ctx context.Context, userID uint64) (*domai
 		return nil, err
 	}
 	_ = u.auditUC.Log(ctx, userID, domain.RoleUser, "TICKET_CREATE", &t.ID, map[string]any{"status": t.Status})
+	u.publishTerminal(t.ID, "INFO", "ticket_usecase", "ticket created by end user; status=OPEN")
 	return &t, nil
 }
 
@@ -72,6 +74,7 @@ func (u *TicketUsecase) ClaimTicket(ctx context.Context, csID uint64, ticketID u
 	}
 
 	_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "TICKET_CLAIM", &ticketID, nil)
+	u.publishTerminal(ticketID, "INFO", "ticket_usecase", "ticket claimed by customer service; least privilege context is now bound to assigned CS")
 	return nil
 }
 
@@ -113,14 +116,23 @@ func (u *TicketUsecase) SetStatus(ctx context.Context, actorID uint64, actorRole
 	}
 
 	_ = u.auditUC.Log(ctx, actorID, actorRole, "TICKET_STATUS_UPDATE", &ticketID, map[string]any{"status": newStatus})
+	u.publishTerminal(ticketID, "INFO", "ticket_usecase", "ticket status updated; transition accepted by backend state machine -> "+newStatus)
 
 	// VALIDASI: auto revoke JIT bila ticket di-close.
 	if newStatus == domain.TicketStatusClosed {
 		_ = u.jitRepo.RevokeByTicket(ctx, ticketID)
 		_ = u.auditUC.Log(ctx, actorID, actorRole, "JIT_REVOKE_TICKET_CLOSED", &ticketID, nil)
+		u.publishTerminal(ticketID, "WARN", "ticket_usecase", "ticket closed; all active JIT sessions revoked automatically")
 	}
 
 	return nil
+}
+
+func (u *TicketUsecase) publishTerminal(ticketID uint64, level, source, message string) {
+	if u.terminalPub == nil {
+		return
+	}
+	u.terminalPub.PublishTicketTerminal(ticketID, domain.TerminalLogEntry{TicketID: ticketID, Timestamp: time.Now(), Level: level, Source: source, Message: message})
 }
 
 func isValidTicketTransition(from, to string) bool {

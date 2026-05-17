@@ -16,10 +16,11 @@ type HTTPHandler struct {
 	jitUC     *usecase.JITUsecase
 	auditUC   *usecase.AuditUsecase
 	csUC      *usecase.CSUsecase
+	adminUC   *usecase.AdminUsecase
 }
 
-func NewHTTPHandler(cfg config.Config, authUC *usecase.AuthUsecase, ticketUC *usecase.TicketUsecase, messageUC *usecase.MessageUsecase, jitUC *usecase.JITUsecase, auditUC *usecase.AuditUsecase, csUC *usecase.CSUsecase) *HTTPHandler {
-	return &HTTPHandler{cfg: cfg, authUC: authUC, ticketUC: ticketUC, messageUC: messageUC, jitUC: jitUC, auditUC: auditUC, csUC: csUC}
+func NewHTTPHandler(cfg config.Config, authUC *usecase.AuthUsecase, ticketUC *usecase.TicketUsecase, messageUC *usecase.MessageUsecase, jitUC *usecase.JITUsecase, auditUC *usecase.AuditUsecase, csUC *usecase.CSUsecase, adminUC *usecase.AdminUsecase) *HTTPHandler {
+	return &HTTPHandler{cfg: cfg, authUC: authUC, ticketUC: ticketUC, messageUC: messageUC, jitUC: jitUC, auditUC: auditUC, csUC: csUC, adminUC: adminUC}
 }
 
 func (h *HTTPHandler) Health(c *gin.Context) {

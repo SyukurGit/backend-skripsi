@@ -67,6 +67,8 @@ func deriveAuditLevel(action string) string {
 	switch action {
 	case "JIT_REQUEST", "RESET_PASSWORD", "UNBLOCK_ACCOUNT":
 		return domain.AuditLevelHigh
+	case "JIT_REQUEST_DENIED":
+		return domain.AuditLevelHigh
 	case "VIEW_KYC", "VIEW_TRANSACTION":
 		return domain.AuditLevelMedium
 	default:

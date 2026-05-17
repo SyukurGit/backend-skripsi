@@ -48,6 +48,16 @@ func (r *TicketRepository) ListOpenUnassigned(ctx context.Context) ([]domain.Tic
 	return items, err
 }
 
+func (r *TicketRepository) ListByStatuses(ctx context.Context, statuses ...string) ([]domain.Ticket, error) {
+	var items []domain.Ticket
+	q := r.db.WithContext(ctx).Order("id desc")
+	if len(statuses) > 0 {
+		q = q.Where("status IN ?", statuses)
+	}
+	err := q.Find(&items).Error
+	return items, err
+}
+
 func (r *TicketRepository) ListByCSIDActive(ctx context.Context, csID uint64) ([]domain.Ticket, error) {
 	var items []domain.Ticket
 	err := r.db.WithContext(ctx).
@@ -63,6 +73,16 @@ func (r *TicketRepository) CountActiveByCSID(ctx context.Context, csID uint64) (
 		Model(&domain.Ticket{}).
 		Where("assigned_cs_id = ? AND status IN (?, ?)", csID, domain.TicketStatusClaimed, domain.TicketStatusInProgress).
 		Count(&cnt).Error
+	return cnt, err
+}
+
+func (r *TicketRepository) CountByStatuses(ctx context.Context, statuses ...string) (int64, error) {
+	var cnt int64
+	q := r.db.WithContext(ctx).Model(&domain.Ticket{})
+	if len(statuses) > 0 {
+		q = q.Where("status IN ?", statuses)
+	}
+	err := q.Count(&cnt).Error
 	return cnt, err
 }
 
