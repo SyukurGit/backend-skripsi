@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+.vscode
+node_modules
+frontend/.next
+frontend/node_modules
+frontend/.env*
+tmp
+dist
+coverage
+*.log
