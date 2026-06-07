@@ -9,7 +9,11 @@ RUN apk add --no-cache git ca-certificates tzdata
 COPY go.mod go.sum* ./
 RUN go mod download
 
-COPY . .
+COPY cmd ./cmd
+COPY config ./config
+COPY database ./database
+COPY internal ./internal
+COPY pkg ./pkg
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/support-api ./cmd/api
 

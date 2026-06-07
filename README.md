@@ -39,7 +39,7 @@ Sesuai Clean Architecture:
 
 ## Konfigurasi & Menjalankan
 
-1) Buat file `.env` (opsional, bisa pakai default):
+1) Buat file `.env` dari `.env.example` (opsional untuk local non-Docker, tapi direkomendasikan):
 
 ```env
 APP_PORT=8080
@@ -53,6 +53,15 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=
 DB_NAME=support_system
+
+DB_ROOT_PASSWORD=root
+DB_APP_USER=support_app
+DB_APP_PASSWORD=support_app_pass
+
+API_PORT=8080
+FRONTEND_PORT=3000
+APP_API_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
 2) Jalankan:
@@ -65,6 +74,54 @@ Saat startup, sistem akan:
 - `CREATE DATABASE IF NOT EXISTS` untuk `DB_NAME`
 - `AutoMigrate` semua tabel
 - seed user default jika tabel `users` masih kosong
+
+## Docker Stack
+
+Repo ini sekarang siap dijalankan sebagai 1 stack Docker: `frontend` (Next.js) + `api` (Gin) + `mysql`.
+
+1) Copy env contoh:
+
+```bash
+cp .env.example .env
+cp frontend/.env.example frontend/.env
+```
+
+2) Jalankan stack:
+
+```bash
+docker compose up --build -d
+```
+
+3) Akses service:
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:8080`
+- Health check API: `http://localhost:8080/health`
+
+Catatan implementasi:
+- MySQL hanya dipakai internal stack via network Docker, jadi lebih aman untuk VPS.
+- API connect ke MySQL dengan user aplikasi (`DB_APP_USER`), bukan root.
+- Frontend membaca `APP_API_BASE_URL` saat runtime, jadi untuk pindah server cukup ganti endpoint di env lalu restart container frontend tanpa rebuild image.
+
+## Deploy / pindah ke VPS
+
+Saat pindah ke VPS, yang biasanya cukup diganti hanya value env berikut:
+
+```env
+CORS_ALLOWED_ORIGINS=https://app.domainkamu.com
+APP_API_BASE_URL=https://api.domainkamu.com
+NEXT_PUBLIC_API_BASE_URL=https://api.domainkamu.com
+JWT_SECRET=ganti-rahasia-production
+DB_ROOT_PASSWORD=ganti-root-password
+DB_APP_PASSWORD=ganti-app-password
+```
+
+Lalu jalankan ulang:
+
+```bash
+docker compose up -d --build
+```
+
+Kalau frontend dan API tetap memakai port publik yang sama seperti local, kamu cukup ganti domain/IP pada `APP_API_BASE_URL`.
 
 Seeder default:
 - admin: `admin@example.com` / `admin123`
