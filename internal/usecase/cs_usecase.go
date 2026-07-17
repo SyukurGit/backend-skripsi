@@ -46,11 +46,13 @@ func (u *CSUsecase) ResetPasswordByTicket(ctx context.Context, csID uint64, tick
 	if err != nil {
 		return err
 	}
+	// Session JIT harus valid dan langsung dikonsumsi sebelum aksi sensitif dijalankan.
+	if err := u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureResetPassword); err != nil {
+		return err
+	}
 	if err := u.userRepo.UpdatePassword(ctx, t.UserID, hashed); err != nil {
 		return err
 	}
-	// Revoke JIT setelah eksekusi sukses.
-	_ = u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureResetPassword)
 	_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "RESET_PASSWORD", &ticketID, map[string]any{"target_user_id": t.UserID})
 	u.publishTerminal(ticketID, "INFO", "cs_usecase", "sensitive action executed; password reset completed")
 	u.publishSystemNotice(ctx, ticketID, "Sistem: Customer Service menjalankan reset password melalui akses sementara yang telah disetujui.")
@@ -66,10 +68,12 @@ func (u *CSUsecase) ChangeEmailByTicket(ctx context.Context, csID uint64, ticket
 	if t == nil || t.AssignedCSID == nil || *t.AssignedCSID != csID {
 		return ErrCSLeastPrivilegeViolation
 	}
+	if err := u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureChangeEmail); err != nil {
+		return err
+	}
 	if err := u.userRepo.UpdateEmail(ctx, t.UserID, newEmail); err != nil {
 		return err
 	}
-	_ = u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureChangeEmail)
 	_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "CHANGE_EMAIL", &ticketID, map[string]any{"target_user_id": t.UserID})
 	u.publishTerminal(ticketID, "INFO", "cs_usecase", "sensitive action executed; email updated")
 	u.publishSystemNotice(ctx, ticketID, "Sistem: Customer Service mengubah email akun melalui akses sementara yang telah disetujui.")
@@ -85,10 +89,12 @@ func (u *CSUsecase) UnblockAccountByTicket(ctx context.Context, csID uint64, tic
 	if t == nil || t.AssignedCSID == nil || *t.AssignedCSID != csID {
 		return ErrCSLeastPrivilegeViolation
 	}
+	if err := u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureUnblockAccount); err != nil {
+		return err
+	}
 	if err := u.updateProfileKYCField(ctx, t.UserID, "is_blocked", false); err != nil {
 		return err
 	}
-	_ = u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureUnblockAccount)
 	_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "UNBLOCK_ACCOUNT", &ticketID, map[string]any{"target_user_id": t.UserID})
 	u.publishTerminal(ticketID, "INFO", "cs_usecase", "sensitive action executed; account unblock completed")
 	u.publishSystemNotice(ctx, ticketID, "Sistem: Customer Service membuka blokir akun melalui akses sementara yang telah disetujui.")
@@ -109,10 +115,12 @@ func (u *CSUsecase) ResetPINByTicket(ctx context.Context, csID uint64, ticketID 
 	if err != nil {
 		return err
 	}
+	if err := u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureResetPIN); err != nil {
+		return err
+	}
 	if err := u.updateProfileKYCField(ctx, t.UserID, "pin_hash", hashed); err != nil {
 		return err
 	}
-	_ = u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureResetPIN)
 	_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "RESET_PIN", &ticketID, map[string]any{"target_user_id": t.UserID})
 	u.publishTerminal(ticketID, "INFO", "cs_usecase", "sensitive action executed; pin reset completed")
 	u.publishSystemNotice(ctx, ticketID, "Sistem: Customer Service menjalankan reset PIN melalui akses sementara yang telah disetujui.")
@@ -150,18 +158,16 @@ func (u *CSUsecase) ViewUserProfileByTicket(ctx context.Context, csID uint64, ti
 	// Full data hanya saat JIT aktif untuk VIEW_KYC.
 	// CEK JIT: memastikan akses hanya berlaku dalam waktu terbatas
 	if u.jitUC != nil {
-		if err := u.jitUC.EnsureValid(ctx, csID, ticketID, "VIEW_KYC"); err == nil {
+		if err := u.jitUC.Consume(ctx, csID, ticketID, domain.JITFeatureViewKYC); err == nil {
 			view.Phone = mask.Phone(p.Phone)
 			view.Balance = p.Balance
 			view.KYCData = revealedKYC(p.KYCData)
 			view.ExposureState = "PARTIAL_AFTER_JIT"
 			view.PolicyNote = "Akses sementara disetujui. Sistem hanya membuka sebagian data yang relevan dan tetap mempertahankan masking pada elemen sensitif tertentu."
-			view.GrantedFeature = "VIEW_KYC"
+			view.GrantedFeature = domain.JITFeatureViewKYC
 			_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "VIEW_KYC", &ticketID, map[string]any{"target_user_id": t.UserID})
 			u.publishTerminal(ticketID, "INFO", "cs_usecase", "sensitive data view opened; full kyc released within active jit session")
 			u.publishSystemNotice(ctx, ticketID, "Sistem: Customer Service membuka data KYC pengguna melalui akses sementara yang telah disetujui.")
-			// Revoke JIT setelah full view berhasil diberikan.
-			_ = u.jitUC.Consume(ctx, csID, ticketID, "VIEW_KYC")
 		}
 	}
 

@@ -32,7 +32,7 @@ func (h *HTTPHandler) CSRequestJIT(c *gin.Context) {
 	}
 
 	// Validasi feature berdasarkan spesifikasi.
-	if req.Feature != domain.JITFeatureResetPassword && req.Feature != domain.JITFeatureUnblockAccount && req.Feature != domain.JITFeatureChangeEmail && req.Feature != domain.JITFeatureResetPIN && req.Feature != "VIEW_KYC" {
+	if !domain.IsValidJITFeature(req.Feature) {
 		code, body := response.Error(http.StatusBadRequest, "feature tidak valid")
 		c.JSON(code, body)
 		return

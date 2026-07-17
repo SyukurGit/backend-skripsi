@@ -66,10 +66,10 @@ func RegisterRoutes(
 
 	// Sensitive features: butuh JIT + LP.
 	csSensitive := csTicket.Group("/sensitive")
-	csSensitive.POST("/reset-password", middleware.JITRequired(jitUC, "RESET_PASSWORD"), h.CSSensitiveResetPassword)
-	csSensitive.POST("/unblock-account", middleware.JITRequired(jitUC, "UNBLOCK_ACCOUNT"), h.CSSensitiveUnblockAccount)
-	csSensitive.POST("/change-email", middleware.JITRequired(jitUC, "CHANGE_EMAIL"), h.CSSensitiveChangeEmail)
-	csSensitive.POST("/reset-pin", middleware.JITRequired(jitUC, "RESET_PIN"), h.CSSensitiveResetPIN)
+	csSensitive.POST("/reset-password", middleware.JITRequired(jitUC, domain.JITFeatureResetPassword), h.CSSensitiveResetPassword)
+	csSensitive.POST("/unblock-account", middleware.JITRequired(jitUC, domain.JITFeatureUnblockAccount), h.CSSensitiveUnblockAccount)
+	csSensitive.POST("/change-email", middleware.JITRequired(jitUC, domain.JITFeatureChangeEmail), h.CSSensitiveChangeEmail)
+	csSensitive.POST("/reset-pin", middleware.JITRequired(jitUC, domain.JITFeatureResetPIN), h.CSSensitiveResetPIN)
 
 	admin := auth.Group("/admin")
 	admin.Use(middleware.RBAC("admin"))

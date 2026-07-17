@@ -50,8 +50,8 @@ func (u *JITUsecase) Request(ctx context.Context, csID uint64, ticketID uint64, 
 		return nil, ErrJITForbidden
 	}
 	u.publishTerminal(ticketID, "INFO", "jit_usecase", "validation step 2 assigned_to_current_cs=true")
-	// VALIDASI: status ticket harus CLAIMED atau IN_PROGRESS.
-	if t.Status != domain.TicketStatusClaimed && t.Status != domain.TicketStatusInProgress {
+	// VALIDASI: status ticket harus IN_PROGRESS sebelum JIT diberikan.
+	if t.Status != domain.TicketStatusInProgress {
 		_ = u.auditUC.Log(ctx, csID, domain.RoleCS, "JIT_REQUEST_DENIED", &ticketID, map[string]any{"feature": feature, "reason": "Status tiket tidak aktif untuk JIT"})
 		u.publishTerminal(ticketID, "WARN", "jit_usecase", "validation step 3 ticket_status_eligible=false; current_status="+t.Status)
 		u.publishTerminal(ticketID, "WARN", "jit_usecase", "jit request denied; ticket status not eligible for temporary access")

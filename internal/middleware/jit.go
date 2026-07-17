@@ -34,7 +34,7 @@ func JITRequired(jitUC *usecase.JITUsecase, feature string) gin.HandlerFunc {
 
 		// CEK JIT: memastikan akses hanya berlaku dalam waktu terbatas
 		if err := jitUC.EnsureValid(c.Request.Context(), csID, ticketID, feature); err != nil {
-			code, body := response.Error(http.StatusForbidden, "jit tidak aktif atau expired")
+			code, body := response.Error(http.StatusForbidden, "session JIT ditolak karena tidak sesuai dengan fitur yang diminta: "+err.Error())
 			c.JSON(code, body)
 			c.Abort()
 			return
