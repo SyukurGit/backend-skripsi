@@ -36,6 +36,10 @@ var versionedMigrations = []versionedMigration{
 		version: "2026081102_sync_demo_accounts_after_seed",
 		apply:   syncDemoAccounts,
 	},
+	{
+		version: "2026081103_sync_demo_accounts_isolated_queries",
+		apply:   syncDemoAccounts,
+	},
 }
 
 // RunVersionedMigrations dijalankan setelah SeedIfEmpty agar data migration
@@ -43,7 +47,7 @@ var versionedMigrations = []versionedMigration{
 func RunVersionedMigrations(db *gorm.DB) error {
 	return db.Connection(func(conn *gorm.DB) error {
 		var lockAcquired int
-		if err := conn.Raw("SELECT GET_LOCK(?, 30)", "support_platform_schema_migrations").Scan(&lockAcquired).Error; err != nil {
+		if err := freshDB(conn).Raw("SELECT GET_LOCK(?, 30)", "support_platform_schema_migrations").Scan(&lockAcquired).Error; err != nil {
 			return fmt.Errorf("acquire migration lock: %w", err)
 		}
 		if lockAcquired != 1 {
@@ -51,25 +55,25 @@ func RunVersionedMigrations(db *gorm.DB) error {
 		}
 		defer func() {
 			var lockReleased int
-			if err := conn.Raw("SELECT RELEASE_LOCK(?)", "support_platform_schema_migrations").Scan(&lockReleased).Error; err != nil {
+			if err := freshDB(conn).Raw("SELECT RELEASE_LOCK(?)", "support_platform_schema_migrations").Scan(&lockReleased).Error; err != nil {
 				log.Printf("migrate: gagal release migration lock: %v", err)
 			}
 		}()
 
 		for _, migration := range versionedMigrations {
 			var count int64
-			if err := conn.Model(&schemaMigration{}).Where("version = ?", migration.version).Count(&count).Error; err != nil {
+			if err := freshDB(conn).Model(&schemaMigration{}).Where("version = ?", migration.version).Count(&count).Error; err != nil {
 				return fmt.Errorf("check migration %s: %w", migration.version, err)
 			}
 			if count > 0 {
 				continue
 			}
 
-			if err := conn.Transaction(func(tx *gorm.DB) error {
+			if err := freshDB(conn).Transaction(func(tx *gorm.DB) error {
 				if err := migration.apply(tx); err != nil {
 					return err
 				}
-				return tx.Create(&schemaMigration{Version: migration.version, AppliedAt: time.Now()}).Error
+				return freshDB(tx).Create(&schemaMigration{Version: migration.version, AppliedAt: time.Now()}).Error
 			}); err != nil {
 				return fmt.Errorf("apply migration %s: %w", migration.version, err)
 			}
@@ -81,9 +85,13 @@ func RunVersionedMigrations(db *gorm.DB) error {
 	})
 }
 
+func freshDB(db *gorm.DB) *gorm.DB {
+	return db.Session(&gorm.Session{NewDB: true})
+}
+
 func syncDemoAccounts(tx *gorm.DB) error {
 	var userCount int64
-	if err := tx.Model(&domain.User{}).Count(&userCount).Error; err != nil {
+	if err := freshDB(tx).Model(&domain.User{}).Count(&userCount).Error; err != nil {
 		return err
 	}
 	// Database kosong akan diisi oleh SeedIfEmpty setelah proses migration selesai.
@@ -103,13 +111,13 @@ func syncDemoAccounts(tx *gorm.DB) error {
 
 	for _, rename := range renames {
 		var targetCount int64
-		if err := tx.Model(&domain.User{}).Where("email = ?", rename.to).Count(&targetCount).Error; err != nil {
+		if err := freshDB(tx).Model(&domain.User{}).Where("email = ?", rename.to).Count(&targetCount).Error; err != nil {
 			return err
 		}
 		if targetCount > 0 {
 			continue
 		}
-		if err := tx.Model(&domain.User{}).Where("email = ?", rename.from).Update("email", rename.to).Error; err != nil {
+		if err := freshDB(tx).Model(&domain.User{}).Where("email = ?", rename.from).Update("email", rename.to).Error; err != nil {
 			return err
 		}
 	}
@@ -136,9 +144,9 @@ func syncDemoAccounts(tx *gorm.DB) error {
 
 	for _, account := range accounts {
 		var existing domain.User
-		err := tx.Where("email = ?", account.Email).First(&existing).Error
+		err := freshDB(tx).Where("email = ?", account.Email).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if err := tx.Create(&account).Error; err != nil {
+			if err := freshDB(tx).Create(&account).Error; err != nil {
 				return err
 			}
 			continue
@@ -146,7 +154,7 @@ func syncDemoAccounts(tx *gorm.DB) error {
 		if err != nil {
 			return err
 		}
-		if err := tx.Model(&existing).Updates(map[string]any{
+		if err := freshDB(tx).Model(&existing).Updates(map[string]any{
 			"password": account.Password,
 			"role":     account.Role,
 		}).Error; err != nil {
@@ -155,11 +163,11 @@ func syncDemoAccounts(tx *gorm.DB) error {
 	}
 
 	var cs02 domain.User
-	if err := tx.Where("email = ?", "cs02@test.com").First(&cs02).Error; err != nil {
+	if err := freshDB(tx).Where("email = ?", "cs02@test.com").First(&cs02).Error; err != nil {
 		return err
 	}
 	var cs02ProfileCount int64
-	if err := tx.Model(&domain.UserProfile{}).Where("user_id = ?", cs02.ID).Count(&cs02ProfileCount).Error; err != nil {
+	if err := freshDB(tx).Model(&domain.UserProfile{}).Where("user_id = ?", cs02.ID).Count(&cs02ProfileCount).Error; err != nil {
 		return err
 	}
 	if cs02ProfileCount == 0 {
@@ -170,7 +178,7 @@ func syncDemoAccounts(tx *gorm.DB) error {
 			KYCData:   datatypes.JSON([]byte(`{"department":"support"}`)),
 			CreatedAt: time.Now(),
 		}
-		if err := tx.Create(&profile).Error; err != nil {
+		if err := freshDB(tx).Create(&profile).Error; err != nil {
 			return err
 		}
 	}
