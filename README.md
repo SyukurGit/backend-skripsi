@@ -73,6 +73,7 @@ go run ./cmd/api
 Saat startup, sistem akan:
 - `CREATE DATABASE IF NOT EXISTS` untuk `DB_NAME`
 - `AutoMigrate` semua tabel
+- menjalankan data migration berversi yang belum tercatat di tabel `schema_migrations`
 - seed user default jika tabel `users` masih kosong
 
 ## Docker Stack
@@ -118,15 +119,20 @@ DB_APP_PASSWORD=ganti-app-password
 Lalu jalankan ulang:
 
 ```bash
+git pull
 docker compose up -d --build
+docker compose logs --tail=100 api
 ```
+
+Container API otomatis menjalankan migration yang belum pernah diterapkan. Volume `mysql_data` tetap dipertahankan; jangan memakai `docker compose down -v` ketika deploy karena opsi `-v` menghapus database.
 
 Kalau frontend dan API tetap memakai port publik yang sama seperti local, kamu cukup ganti domain/IP pada `APP_API_BASE_URL`.
 
 Seeder default:
-- admin: `admin@example.com` / `admin123`
-- cs: `cs@example.com` / `cs123`
-- user: `user@example.com` / `user123`
+- Customer Support: `cs01@test.com` / `cs123`
+- Customer Support: `cs02@test.com` / `cs123`
+- user: `syukur@gmail.com` / `user123`
+- admin: `admin@test.com` / `admin123`
 
 ## Endpoint API
 
@@ -141,7 +147,7 @@ Semua response dibungkus:
 - POST `/auth/login` (public)
 Request:
 ```json
-{"email":"admin@example.com","password":"admin123"}
+{"email":"admin@test.com","password":"admin123"}
 ```
 Response:
 ```json

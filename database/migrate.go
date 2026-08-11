@@ -18,7 +18,12 @@ func Migrate(db *gorm.DB) error {
 		&domain.Message{},
 		&domain.JITSession{},
 		&domain.AuditLog{},
+		&schemaMigration{},
 	); err != nil {
+		return err
+	}
+
+	if err := runVersionedMigrations(db); err != nil {
 		return err
 	}
 
