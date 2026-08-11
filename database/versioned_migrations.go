@@ -32,9 +32,15 @@ var versionedMigrations = []versionedMigration{
 		version: "2026081101_sync_demo_accounts",
 		apply:   syncDemoAccounts,
 	},
+	{
+		version: "2026081102_sync_demo_accounts_after_seed",
+		apply:   syncDemoAccounts,
+	},
 }
 
-func runVersionedMigrations(db *gorm.DB) error {
+// RunVersionedMigrations dijalankan setelah SeedIfEmpty agar data migration
+// tidak ditandai selesai ketika tabel users masih kosong.
+func RunVersionedMigrations(db *gorm.DB) error {
 	return db.Connection(func(conn *gorm.DB) error {
 		var lockAcquired int
 		if err := conn.Raw("SELECT GET_LOCK(?, 30)", "support_platform_schema_migrations").Scan(&lockAcquired).Error; err != nil {

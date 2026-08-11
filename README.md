@@ -73,8 +73,8 @@ go run ./cmd/api
 Saat startup, sistem akan:
 - `CREATE DATABASE IF NOT EXISTS` untuk `DB_NAME`
 - `AutoMigrate` semua tabel
-- menjalankan data migration berversi yang belum tercatat di tabel `schema_migrations`
 - seed user default jika tabel `users` masih kosong
+- menjalankan data migration berversi yang belum tercatat di tabel `schema_migrations`
 
 ## Docker Stack
 

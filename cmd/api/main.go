@@ -30,6 +30,10 @@ func main() {
 		log.Fatalf("gagal seed: %v", err)
 	}
 
+	if err := database.RunVersionedMigrations(db); err != nil {
+		log.Fatalf("gagal menjalankan data migration: %v", err)
+	}
+
 	userRepo := mysql.NewUserRepository(db)
 	profileRepo := mysql.NewUserProfileRepository(db)
 	ticketRepo := mysql.NewTicketRepository(db)
@@ -70,11 +74,3 @@ func main() {
 		log.Fatalf("server gagal start: %v", err)
 	}
 }
-
-
-
-
-
-
-
-

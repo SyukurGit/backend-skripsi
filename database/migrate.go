@@ -23,10 +23,6 @@ func Migrate(db *gorm.DB) error {
 		return err
 	}
 
-	if err := runVersionedMigrations(db); err != nil {
-		return err
-	}
-
 	// Backfill untuk data lama: pastikan audit_logs.level tidak NULL.
 	res := db.Model(&domain.AuditLog{}).Where("level IS NULL OR level = ''").Update("level", "LOW")
 	if res.Error != nil {
