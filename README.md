@@ -4,11 +4,11 @@ Backend prototype untuk penelitian Tugas Akhir yang berfokus pada **kontrol akse
 
 Repositori ini merupakan artefak implementasi dari penelitian:
 
-**Peneliti:** Muhammad Syukur
-**NIM:** 220705058
-**Program Studi:** Teknologi Informasi
-**Fakultas:** Sains dan Teknologi
-**Universitas:** UIN Ar-Raniry Banda Aceh
+**Peneliti:** Muhammad Syukur<br>
+**NIM:** 220705058<br>
+**Program Studi:** Teknologi Informasi<br>
+**Fakultas:** Sains dan Teknologi<br>
+**Universitas:** UIN Ar-Raniry Banda Aceh<br>
 **Tahun:** 2026
 
 > **Catatan:** Sistem pada repositori ini merupakan **prototipe akademik** yang digunakan untuk merancang, mengimplementasikan, dan memverifikasi mekanisme kontrol akses. Sistem tidak ditujukan sebagai implementasi dompet digital komersial atau sebagai sistem yang siap digunakan pada lingkungan produksi.
