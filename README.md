@@ -1,51 +1,366 @@
-# Support Backend (Clean Architecture)
+# Backend Prototype — Internal Access Control for Digital Wallet
 
-Backend ini adalah sistem ticketing + live chat untuk user dan customer support (CS), dengan fokus keamanan:
+Backend prototype untuk penelitian Tugas Akhir yang berfokus pada **kontrol akses pengguna internal pada layer aplikasi**, dengan menerapkan **Role-Based Access Control (RBAC)** sebagai kontrol dasar, **Least Privilege (LP)** sebagai pembatas lingkup akses, dan **Just-In-Time (JIT) Access** sebagai mekanisme akses sementara terhadap fitur sensitif.
 
-1) RBAC (Role-Based Access Control)
-- Setiap endpoint dilindungi middleware RBAC berdasarkan role `admin`, `cs`, `user`.
+Repositori ini merupakan artefak implementasi dari penelitian:
 
-2) Least Privilege (LP)
-- CS hanya boleh akses ticket yang dia claim.
-- WAJIB VALIDASI (di middleware LP dan usecase):
-  - `assigned_cs_id` harus sama dengan CS yang login
-  - status ticket harus `CLAIMED` atau `IN_PROGRESS`
+**Peneliti:** Muhammad Syukur
+**NIM:** 220705058
+**Program Studi:** Teknologi Informasi
+**Fakultas:** Sains dan Teknologi
+**Universitas:** UIN Ar-Raniry Banda Aceh
+**Tahun:** 2026
 
-3) Just-In-Time (JIT)
-- Untuk fitur sensitif: `RESET_PASSWORD`, `UNBLOCK_ACCOUNT`, `CHANGE_EMAIL`, `RESET_PIN`.
-- Flow:
-  1. CS claim ticket
-  2. CS request JIT (ticket harus `OPEN` dan assigned ke CS)
-  3. Sistem buat session JIT expired 15 menit
-  4. Middleware JIT cek session ada, aktif, belum expired
-  5. Auto revoke jika expired atau ticket `CLOSED`
+> **Catatan:** Sistem pada repositori ini merupakan **prototipe akademik** yang digunakan untuk merancang, mengimplementasikan, dan memverifikasi mekanisme kontrol akses. Sistem tidak ditujukan sebagai implementasi dompet digital komersial atau sebagai sistem yang siap digunakan pada lingkungan produksi.
 
-Catatan: bagian security logic memiliki komentar Bahasa Indonesia sesuai instruksi.
+---
 
-## Struktur Project
+## Overview
 
-Sesuai Clean Architecture:
+Prototipe merepresentasikan lingkungan operasional backend sistem dompet digital yang melibatkan tiga kategori pengguna:
 
-- `cmd/api/main.go` (entrypoint)
-- `config/` (loader env)
-- `database/` (connect, migrate, seed)
-- `internal/domain/` (entity, constants, interfaces)
-- `internal/repository/mysql/` (repo GORM MySQL)
-- `internal/usecase/` (business rules)
-- `internal/delivery/http/` (Gin handlers + routing)
-- `internal/delivery/websocket/` (Gorilla WS: chat + audit)
-- `internal/middleware/` (JWT auth, RBAC, LP, JIT)
-- `pkg/` (jwt, password, response)
+* **User** — pengguna akhir dan pemilik data.
+* **Customer Support (CS)** — pengguna internal yang menangani ticket dan menjadi fokus utama penerapan Least Privilege dan Just-In-Time Access.
+* **Administrator** — pengguna internal yang berperan dalam pengelolaan dan pemantauan aktivitas sistem.
 
-## Konfigurasi & Menjalankan
+Alur operasional utama dibangun menggunakan mekanisme **ticket-based access**, sehingga akses Customer Support terhadap data pengguna tidak diberikan secara global.
 
-1) Buat file `.env` dari `.env.example` (opsional untuk local non-Docker, tapi direkomendasikan):
+Secara konseptual, kontrol akses diterapkan secara berlapis:
+
+```text
+Authentication
+      │
+      ▼
+     JWT
+      │
+      ▼
+     RBAC
+ Role Validation
+      │
+      ▼
+Least Privilege
+Ticket / Assignment Scope
+      │
+      ▼
+Just-In-Time Access
+Temporary Sensitive Access
+      │
+      ▼
+ Business Logic
+      │
+      ▼
+   Database
+```
+
+RBAC menentukan **siapa** yang dapat memasuki area tertentu, Least Privilege membatasi **ruang lingkup tugas** yang dapat diakses, sedangkan Just-In-Time Access membatasi **fitur sensitif, konteks, dan masa berlaku akses**.
+
+---
+
+# Access Control Model
+
+## 1. Role-Based Access Control (RBAC)
+
+RBAC digunakan sebagai lapisan awal otorisasi.
+
+Endpoint backend dikelompokkan berdasarkan tiga role:
+
+```text
+user
+cs
+admin
+```
+
+Setiap request yang telah terautentikasi membawa JWT yang berisi identitas pengguna dan role. Middleware kemudian memverifikasi apakah role tersebut diperbolehkan mengakses endpoint yang diminta.
+
+Contoh pemisahan akses:
+
+```text
+/user/*   → role user
+/cs/*     → role cs
+/admin/*  → role admin
+```
+
+Request lintas role ditolak oleh backend dengan respons `403 Forbidden`.
+
+RBAC pada penelitian ini **bukan satu-satunya kontrol akses**. Role CS hanya memberikan akses awal ke area kerja Customer Support, sedangkan akses terhadap ticket dan fitur sensitif tetap membutuhkan validasi tambahan.
+
+---
+
+## 2. Least Privilege
+
+Least Privilege diterapkan untuk membatasi ruang lingkup akses Customer Support agar tetap sesuai dengan kebutuhan penanganan ticket.
+
+Setelah berhasil login, CS tidak mendapatkan akses global terhadap seluruh pengguna atau seluruh data pada sistem.
+
+CS hanya dapat:
+
+* melihat antrean ticket yang tersedia;
+* melakukan claim terhadap ticket;
+* melihat ticket yang menjadi assignment-nya;
+* berinteraksi dengan pengguna dalam konteks ticket tersebut;
+* mengajukan akses JIT ketika membutuhkan fitur sensitif.
+
+Backend melakukan validasi terhadap hubungan antara CS yang sedang login dan ticket yang diakses.
+
+Validasi utama meliputi:
+
+```text
+ticket_id exists
+        │
+        ▼
+assigned_cs_id == authenticated CS
+        │
+        ▼
+ticket context valid
+        │
+        ▼
+request allowed
+```
+
+Dengan mekanisme tersebut, memiliki role `cs` saja tidak cukup untuk membuka ticket milik Customer Support lain.
+
+---
+
+## 3. Just-In-Time Access
+
+Just-In-Time Access digunakan untuk mengendalikan fitur yang dikategorikan sensitif agar tidak tersedia secara permanen pada role Customer Support.
+
+Fitur sensitif pada prototipe meliputi:
+
+```text
+VIEW_KYC
+RESET_PASSWORD
+CHANGE_EMAIL
+RESET_PIN
+UNBLOCK_ACCOUNT
+```
+
+Sebelum menjalankan salah satu fitur tersebut, CS harus memperoleh **JIT session** terlebih dahulu.
+
+### JIT Request Validation
+
+Backend melakukan validasi berikut sebelum session diterbitkan:
+
+1. `ticket_id` harus tersedia pada database.
+2. Ticket harus ditugaskan kepada CS yang mengajukan request.
+3. Ticket harus berada pada status `IN_PROGRESS`.
+4. Feature yang diminta harus termasuk fitur yang dikendalikan melalui JIT.
+5. Session aktif sebelumnya untuk kombinasi CS, ticket, dan feature yang sama dinonaktifkan sebelum session baru dibuat.
+
+Jika seluruh kondisi terpenuhi, backend membuat session sementara pada tabel:
+
+```text
+jit_sessions
+```
+
+Session mengikat:
+
+```text
+CS
+Ticket
+Feature
+Active Status
+Expiration Time
+```
+
+Pada prototipe ini:
+
+```text
+JIT lifetime : 15 minutes
+Usage        : Single-use
+```
+
+Durasi 15 menit merupakan parameter prototipe untuk memverifikasi mekanisme akses sementara dan **bukan standar keamanan baku untuk sistem produksi**.
+
+Session JIT dinonaktifkan apabila:
+
+* fitur sensitif berhasil digunakan;
+* session melewati `expired_at`;
+* ticket ditutup;
+* CS melakukan logout.
+
+Dengan demikian, akses sensitif tidak melekat secara permanen pada role Customer Support.
+
+---
+
+# Ticket Lifecycle
+
+Ticket menggunakan state berikut:
+
+```text
+OPEN
+  │
+  ▼
+CLAIMED
+  │
+  ▼
+IN_PROGRESS
+  │
+  ▼
+RESOLVED
+  │
+  ▼
+CLOSED
+```
+
+### OPEN
+
+Ticket baru yang belum ditugaskan kepada Customer Support.
+
+### CLAIMED
+
+Ticket telah diambil dan memiliki hubungan assignment dengan CS tertentu.
+
+### IN_PROGRESS
+
+Ticket sedang aktif ditangani.
+
+Status ini menjadi salah satu persyaratan untuk mengajukan session JIT.
+
+### RESOLVED
+
+Permasalahan telah ditangani.
+
+### CLOSED
+
+Ticket telah ditutup dan tidak lagi menjadi konteks operasional untuk akses sensitif.
+
+Transisi state yang tidak sesuai dengan aturan backend akan ditolak.
+
+---
+
+# Backend Architecture
+
+Backend dibangun menggunakan **Golang** dengan framework **Gin** dan disusun dengan pemisahan lapisan yang mengikuti pola Clean Architecture.
+
+Alur utama request:
+
+```text
+Client / API Tester
+        │
+        ▼
+    Gin Router
+        │
+        ▼
+ Authentication
+        │
+        ▼
+ Access Control Layer
+ ┌───────────────────────┐
+ │ RBAC                  │
+ │ Least Privilege       │
+ │ Just-In-Time Access   │
+ └───────────────────────┘
+        │
+        ▼
+ Usecase / Business Logic
+        │
+        ▼
+ Repository Layer
+        │
+        ▼
+      MySQL
+```
+
+Validasi kontrol akses dilakukan pada sisi backend sehingga keputusan menerima atau menolak request tidak bergantung pada tampilan frontend.
+
+---
+
+# Project Structure
+
+```text
+.
+├── cmd/
+│   └── api/
+│       └── main.go
+│
+├── config/
+│
+├── database/
+│
+├── internal/
+│   ├── domain/
+│   ├── repository/
+│   │   └── mysql/
+│   ├── usecase/
+│   ├── delivery/
+│   │   ├── http/
+│   │   └── websocket/
+│   └── middleware/
+│
+├── pkg/
+│
+├── frontend/
+│
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
+
+### Layer
+
+| Directory                     | Responsibility                                     |
+| ----------------------------- | -------------------------------------------------- |
+| `cmd/api`                     | Application entry point                            |
+| `config`                      | Environment configuration                          |
+| `database`                    | Database connection, migration, dan seed           |
+| `internal/domain`             | Entity, constants, dan interface                   |
+| `internal/repository/mysql`   | Data access menggunakan MySQL/GORM                 |
+| `internal/usecase`            | Business rules dan application logic               |
+| `internal/delivery/http`      | Gin handler dan routing                            |
+| `internal/delivery/websocket` | WebSocket untuk chat dan audit event               |
+| `internal/middleware`         | JWT, RBAC, Least Privilege, dan JIT validation     |
+| `pkg`                         | Shared utility seperti JWT, password, dan response |
+
+---
+
+# Technology Stack
+
+| Component              | Technology              |
+| ---------------------- | ----------------------- |
+| Backend                | Golang                  |
+| HTTP Framework         | Gin                     |
+| Database               | MySQL                   |
+| ORM                    | GORM                    |
+| Authentication         | JWT                     |
+| Realtime Communication | Gorilla WebSocket       |
+| Frontend Demo          | Next.js                 |
+| API Testing            | Postman                 |
+| Containerization       | Docker / Docker Compose |
+
+---
+
+# Getting Started
+
+## Requirements
+
+Untuk menjalankan backend secara lokal:
+
+```text
+Go
+MySQL
+Git
+```
+
+Atau gunakan Docker untuk menjalankan stack secara terisolasi.
+
+---
+
+## Environment Configuration
+
+Salin konfigurasi contoh:
+
+```bash
+cp .env.example .env
+```
+
+Contoh konfigurasi:
 
 ```env
 APP_PORT=8080
+
 JWT_SECRET=change_me_super_secret
 
-# Comma-separated. Use "*" only for local/dev.
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 DB_HOST=127.0.0.1
@@ -60,285 +375,696 @@ DB_APP_PASSWORD=support_app_pass
 
 API_PORT=8080
 FRONTEND_PORT=3000
+
 APP_API_BASE_URL=http://localhost:8080
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
-2) Jalankan:
+> Jangan menggunakan secret, password database, atau credential contoh untuk deployment nyata.
+
+---
+
+# Run Locally
+
+Jalankan backend:
 
 ```bash
 go run ./cmd/api
 ```
 
-Saat startup, sistem akan:
-- `CREATE DATABASE IF NOT EXISTS` untuk `DB_NAME`
-- `AutoMigrate` semua tabel
-- seed user default jika tabel `users` masih kosong
-- menjalankan data migration berversi yang belum tercatat di tabel `schema_migrations`
+Pada proses startup, aplikasi akan:
 
-## Docker Stack
+* menginisialisasi koneksi database;
+* membuat database apabila belum tersedia;
+* menjalankan migration;
+* menjalankan data migration yang belum tercatat;
+* melakukan seed data default ketika diperlukan;
+* menjalankan HTTP API.
 
-Repo ini sekarang siap dijalankan sebagai 1 stack Docker: `frontend` (Next.js) + `api` (Gin) + `mysql`.
+---
 
-1) Copy env contoh:
+# Docker
+
+Repositori menyediakan Docker Compose untuk menjalankan komponen:
+
+```text
+Frontend
+API
+MySQL
+```
+
+Copy environment:
 
 ```bash
 cp .env.example .env
 cp frontend/.env.example frontend/.env
 ```
 
-2) Jalankan stack:
+Build dan jalankan:
 
 ```bash
 docker compose up --build -d
 ```
 
-3) Akses service:
-- Frontend: `http://localhost:3000`
-- API: `http://localhost:8080`
-- Health check API: `http://localhost:8080/health`
+Service lokal:
 
-Catatan implementasi:
-- MySQL hanya dipakai internal stack via network Docker, jadi lebih aman untuk VPS.
-- API connect ke MySQL dengan user aplikasi (`DB_APP_USER`), bukan root.
-- Frontend membaca `APP_API_BASE_URL` saat runtime, jadi untuk pindah server cukup ganti endpoint di env lalu restart container frontend tanpa rebuild image.
-
-## Deploy / pindah ke VPS
-
-Saat pindah ke VPS, yang biasanya cukup diganti hanya value env berikut:
-
-```env
-CORS_ALLOWED_ORIGINS=https://app.domainkamu.com
-APP_API_BASE_URL=https://api.domainkamu.com
-NEXT_PUBLIC_API_BASE_URL=https://api.domainkamu.com
-JWT_SECRET=ganti-rahasia-production
-DB_ROOT_PASSWORD=ganti-root-password
-DB_APP_PASSWORD=ganti-app-password
+```text
+Frontend     http://localhost:3000
+API          http://localhost:8080
+Health Check http://localhost:8080/health
 ```
 
-Lalu jalankan ulang:
+Dalam konfigurasi Docker, aplikasi API berkomunikasi dengan MySQL melalui network internal stack. Konfigurasi deployment tetap harus disesuaikan dengan kebutuhan keamanan lingkungan tempat aplikasi dijalankan.
+
+---
+
+# Deployment Notes
+
+Untuk deployment ke server/VPS, konfigurasi berikut umumnya perlu disesuaikan:
+
+```env
+CORS_ALLOWED_ORIGINS=https://app.example.com
+
+APP_API_BASE_URL=https://api.example.com
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com
+
+JWT_SECRET=replace-with-strong-secret
+
+DB_ROOT_PASSWORD=replace-root-password
+DB_APP_PASSWORD=replace-app-password
+```
+
+Kemudian:
 
 ```bash
 git pull
+
 docker compose up -d --build
+
 docker compose logs --tail=100 api
 ```
 
-Container API otomatis menjalankan migration yang belum pernah diterapkan. Volume `mysql_data` tetap dipertahankan; jangan memakai `docker compose down -v` ketika deploy karena opsi `-v` menghapus database.
+Database disimpan menggunakan Docker volume.
 
-Kalau frontend dan API tetap memakai port publik yang sama seperti local, kamu cukup ganti domain/IP pada `APP_API_BASE_URL`.
+Hindari:
 
-Seeder default:
-- Customer Support: `cs01@test.com` / `cs123`
-- Customer Support: `cs02@test.com` / `cs123`
-- user: `syukur@gmail.com` / `user123`
-- admin: `admin@test.com` / `admin123`
-
-## Endpoint API
-
-Semua response dibungkus:
-
-```json
-{"success":true,"message":"...","data":{}}
+```bash
+docker compose down -v
 ```
 
-### Auth
+apabila data database perlu dipertahankan karena opsi `-v` akan menghapus volume yang digunakan stack.
 
-- POST `/auth/login` (public)
+---
+
+# Demo Accounts
+
+Akun berikut digunakan sebagai data demonstrasi pada lingkungan prototipe:
+
+| Role             | Email              | Password   |
+| ---------------- | ------------------ | ---------- |
+| Customer Support | `cs01@test.com`    | `cs123`    |
+| Customer Support | `cs02@test.com`    | `cs123`    |
+| User             | `syukur@gmail.com` | `user123`  |
+| Administrator    | `admin@test.com`   | `admin123` |
+
+> Credential di atas hanya digunakan untuk demonstrasi dan pengujian prototipe.
+
+---
+
+# API Response Format
+
+Sebagian besar response API menggunakan struktur:
+
+```json
+{
+  "success": true,
+  "message": "...",
+  "data": {}
+}
+```
+
+---
+
+# API Endpoints
+
+## Authentication
+
+### Login
+
+```http
+POST /auth/login
+```
+
 Request:
+
 ```json
-{"email":"admin@test.com","password":"admin123"}
+{
+  "email": "admin@test.com",
+  "password": "admin123"
+}
 ```
+
 Response:
+
 ```json
-{"success":true,"message":"login berhasil","data":{"token":"...","user":{"id":1,"email":"...","role":"admin"}}}
+{
+  "success": true,
+  "message": "login berhasil",
+  "data": {
+    "token": "...",
+    "user": {
+      "id": 1,
+      "email": "...",
+      "role": "admin"
+    }
+  }
+}
 ```
 
-- POST `/auth/logout` (JWT required)
-Middleware: `JWT`
-Efek:
-- Jika role `cs`, semua session JIT aktif untuk CS tersebut akan direvoke.
+---
 
-### User (role: user)
+### Logout
 
-Middleware group: `JWT` + `RBAC(user)`
+```http
+POST /auth/logout
+```
 
-- POST `/user/tickets`
-Response: ticket baru.
+Middleware:
 
-- GET `/user/tickets`
+```text
+JWT
+```
 
-- POST `/user/tickets/:ticket_id/close`
+Untuk role Customer Support, logout juga menonaktifkan session JIT aktif yang masih terkait dengan CS tersebut.
 
-- GET `/user/tickets/:ticket_id/messages?limit=50`
+---
 
-- POST `/user/tickets/:ticket_id/messages`
+# User API
+
+Middleware:
+
+```text
+JWT
+RBAC(user)
+```
+
+### Create Ticket
+
+```http
+POST /user/tickets
+```
+
+### List User Tickets
+
+```http
+GET /user/tickets
+```
+
+### Close Ticket
+
+```http
+POST /user/tickets/:ticket_id/close
+```
+
+### Ticket Messages
+
+```http
+GET /user/tickets/:ticket_id/messages?limit=50
+```
+
+```http
+POST /user/tickets/:ticket_id/messages
+```
+
 Request:
+
 ```json
-{"message":"halo"}
+{
+  "message": "halo"
+}
 ```
 
-### CS (role: cs)
+---
 
-Middleware group: `JWT` + `RBAC(cs)`
+# Customer Support API
 
-- GET `/cs/tickets/open`
-  List ticket `OPEN` yang belum assigned.
+Middleware dasar:
 
-- GET `/cs/tickets/my`
-  List ticket aktif milik CS (status `CLAIMED` / `IN_PROGRESS`).
+```text
+JWT
+RBAC(cs)
+```
 
-- POST `/cs/tickets/:ticket_id/claim`
-Validasi backend:
-- COUNT ticket aktif CS (`CLAIMED` atau `IN_PROGRESS`) < 2
+### Available Tickets
 
-Catatan state machine:
-- setelah claim sukses, status ticket menjadi `CLAIMED`
+```http
+GET /cs/tickets/open
+```
 
-Endpoint berikut dilindungi Least Privilege middleware:
-Middleware tambahan: `LP` (assigned_cs_id harus sama)
+Menampilkan ticket berstatus `OPEN` yang belum memiliki assignment.
 
-- GET `/cs/tickets/:ticket_id`
-  Ambil detail ticket (hanya jika ticket assigned ke CS).
+---
 
-- POST `/cs/tickets/:ticket_id/status`
+### Assigned Tickets
+
+```http
+GET /cs/tickets/my
+```
+
+Menampilkan ticket aktif yang menjadi assignment CS.
+
+---
+
+### Claim Ticket
+
+```http
+POST /cs/tickets/:ticket_id/claim
+```
+
+Setelah claim berhasil:
+
+```text
+OPEN → CLAIMED
+```
+
+Backend juga membatasi jumlah ticket aktif yang dapat ditangani CS sesuai aturan operasional prototipe.
+
+---
+
+## Least Privilege Protected Endpoints
+
+Endpoint berikut membutuhkan validasi assignment ticket.
+
+Middleware tambahan:
+
+```text
+LP
+```
+
+### Ticket Detail
+
+```http
+GET /cs/tickets/:ticket_id
+```
+
+### Update Ticket Status
+
+```http
+POST /cs/tickets/:ticket_id/status
+```
+
 Request:
+
 ```json
-{"status":"IN_PROGRESS"}
+{
+  "status": "IN_PROGRESS"
+}
 ```
-Status yang diizinkan: `IN_PROGRESS`, `RESOLVED`, `CLOSED`.
 
-- GET `/cs/tickets/:ticket_id/messages?limit=50`
+### Ticket Messages
 
-- POST `/cs/tickets/:ticket_id/messages`
+```http
+GET /cs/tickets/:ticket_id/messages?limit=50
+```
+
+```http
+POST /cs/tickets/:ticket_id/messages
+```
+
 Request:
+
 ```json
-{"message":"kami sedang cek"}
+{
+  "message": "kami sedang cek"
+}
 ```
 
-- GET `/cs/tickets/:ticket_id/user/profile`
-Audit action: `VIEW_KYC`.
+### User Profile in Ticket Context
 
-- POST `/cs/tickets/:ticket_id/jit/request`
+```http
+GET /cs/tickets/:ticket_id/user/profile
+```
+
+Data yang diberikan pada akses normal tetap dibatasi sesuai konteks ticket dan kebijakan data exposure prototipe.
+
+---
+
+# JIT Access API
+
+## Request JIT Session
+
+```http
+POST /cs/tickets/:ticket_id/jit/request
+```
+
+Contoh:
+
+```json
+{
+  "feature": "CHANGE_EMAIL"
+}
+```
+
+Session hanya diterbitkan apabila:
+
+```text
+ticket exists
+        +
+assigned to authenticated CS
+        +
+status == IN_PROGRESS
+        +
+feature is JIT-controlled
+```
+
+---
+
+## Sensitive Endpoints
+
+Endpoint sensitif membutuhkan:
+
+```text
+JWT
+RBAC(cs)
+LP
+JIT(feature)
+```
+
+### View KYC
+
+```http
+POST /cs/tickets/:ticket_id/sensitive/view-kyc
+```
+
+Feature:
+
+```text
+VIEW_KYC
+```
+
+---
+
+### Reset Password
+
+```http
+POST /cs/tickets/:ticket_id/sensitive/reset-password
+```
+
+Feature:
+
+```text
+RESET_PASSWORD
+```
+
 Request:
+
 ```json
-{"feature":"RESET_PASSWORD"}
+{
+  "new_password": "passwordbaru123"
+}
 ```
-Validasi backend:
-- ticket harus `CLAIMED` atau `IN_PROGRESS`
-- ticket assigned ke CS
 
-Sensitive endpoints (wajib JIT + LP):
+---
 
-Middleware tambahan: `JIT(feature)`
+### Change Email
 
-- POST `/cs/tickets/:ticket_id/sensitive/reset-password` (feature `RESET_PASSWORD`)
+```http
+POST /cs/tickets/:ticket_id/sensitive/change-email
+```
+
+Feature:
+
+```text
+CHANGE_EMAIL
+```
+
 Request:
+
 ```json
-{"new_password":"passwordbaru123"}
+{
+  "new_email": "new@example.com"
+}
 ```
 
-- POST `/cs/tickets/:ticket_id/sensitive/unblock-account` (feature `UNBLOCK_ACCOUNT`)
+---
 
-- POST `/cs/tickets/:ticket_id/sensitive/change-email` (feature `CHANGE_EMAIL`)
+### Reset PIN
+
+```http
+POST /cs/tickets/:ticket_id/sensitive/reset-pin
+```
+
+Feature:
+
+```text
+RESET_PIN
+```
+
 Request:
+
 ```json
-{"new_email":"new@example.com"}
+{
+  "new_pin": "1234"
+}
 ```
 
-- POST `/cs/tickets/:ticket_id/sensitive/reset-pin` (feature `RESET_PIN`)
-Request:
-```json
-{"new_pin":"1234"}
+---
+
+### Unblock Account
+
+```http
+POST /cs/tickets/:ticket_id/sensitive/unblock-account
 ```
 
-### Admin (role: admin)
+Feature:
 
-Middleware group: `JWT` + `RBAC(admin)`
-
-- GET `/admin/audit-logs?level=HIGH&limit=100`
-Filter level:
-- `HIGH`: `JIT_REQUEST`, `RESET_PASSWORD`, `UNBLOCK_ACCOUNT`
-- `MEDIUM`: `VIEW_KYC`, `VIEW_TRANSACTION`
-
-## Flow Utama
-
-1) Login
-- Client hit `/auth/login`, simpan JWT.
-
-2) Claim Ticket (CS)
-- CS ambil list `/cs/tickets/open`
-- CS claim `/cs/tickets/:ticket_id/claim`
-
-State machine ticket (wajib):
-- `OPEN -> CLAIMED -> IN_PROGRESS -> RESOLVED -> CLOSED`
-- Transisi invalid akan ditolak.
-
-3) JIT Request (CS)
-- CS request `/cs/tickets/:ticket_id/jit/request`
-- Session aktif 15 menit
-
-4) Eksekusi fitur sensitif
-- CS panggil endpoint sensitive sesuai feature
-- Middleware JIT memblok jika session tidak ada/expired
-- Session auto revoke jika ticket `CLOSED` atau expired
-
-## WebSocket
-
-### Live Chat (user & CS)
-
-- GET `/ws/chat/:ticket_id?token=JWT`
-Event server -> client:
-```json
-{"event":"ticket_message","payload":{"ticket_id":1,"sender_id":2,"sender_role":"cs","message":"...","created_at":"..."}}
-```
-Client -> server:
-- kirim text message biasa (string). Server akan simpan ke DB dan broadcast.
-
-Catatan keamanan:
-- VALIDASI: user hanya boleh join ticket miliknya
-- VALIDASI: CS hanya boleh join ticket yang assigned ke dia + status `CLAIMED`/`IN_PROGRESS`
-
-### Real-time Audit Log (admin only)
-
-- GET `/ws/audit?token=JWT`
-Event:
-```json
-{"event":"audit_log","payload":{"id":1,"user_id":2,"role":"cs","level":"HIGH","action":"JIT_REQUEST","ticket_id":1,"metadata":{},"created_at":"..."}}
+```text
+UNBLOCK_ACCOUNT
 ```
 
-Kebijakan pengiriman:
-- WS audit hanya mengirim log level `HIGH` dan `MEDIUM`.
+---
 
-## Audit Log System
+# Administrator API
 
-- Semua aksi penting dipanggil via `AuditUsecase.Log(...)`
-- Disimpan ke tabel `audit_logs`
-- Dikirim real-time ke admin via WebSocket `/ws/audit`
-- Field `audit_logs.level` dipastikan `NOT NULL` dengan default `LOW` dan value dibatasi: `LOW|MEDIUM|HIGH`.
+Middleware:
 
-## Data Exposure Policy
+```text
+JWT
+RBAC(admin)
+```
 
-- Phone selalu dimasking untuk view default (contoh: `0812****123`).
-- KYC default hanya partial (contoh field: `kyc_status`, `is_blocked`, `tier`, `department`).
-- Data full (phone + KYC JSON utuh) hanya boleh muncul saat CS punya session JIT aktif untuk `VIEW_KYC`.
+### Audit Logs
 
-Komentar penting di code:
-- `// VALIDASI: masking data untuk mencegah kebocoran informasi sensitif`
+```http
+GET /admin/audit-logs?level=HIGH&limit=100
+```
 
-## Threat Model (ringkas)
+Audit log digunakan sebagai komponen pendukung observability untuk membantu penelusuran aktivitas penting pada prototipe.
 
-- Internal abuse (CS mencoba lihat data user lain): dicegah oleh `LP` + validasi usecase.
-- Privilege escalation (CS akses fitur sensitif tanpa JIT): dicegah oleh middleware `JITRequired` + revoke setelah sukses.
-- Data leakage via WebSocket: dicegah oleh validasi participant (chat) dan admin-only (audit).
+---
 
-## Panduan untuk Frontend
+# WebSocket
 
-- Login sekali, simpan JWT, lalu set header:
-  - `Authorization: Bearer <token>`
-- Untuk chat:
-  - Connect ke `/ws/chat/:ticket_id?token=<token>`
-  - Render event `ticket_message` sebagai message list
-- Admin dashboard:
-  - Connect ke `/ws/audit?token=<admin_token>` untuk realtime
-  - Gunakan `/admin/audit-logs` untuk initial load + filter
+## Ticket Live Chat
+
+```http
+GET /ws/chat/:ticket_id?token=<JWT>
+```
+
+Server event:
+
+```json
+{
+  "event": "ticket_message",
+  "payload": {
+    "ticket_id": 1,
+    "sender_id": 2,
+    "sender_role": "cs",
+    "message": "...",
+    "created_at": "..."
+  }
+}
+```
+
+Validasi participant tetap dilakukan oleh backend:
+
+```text
+User → hanya ticket miliknya
+
+CS → hanya ticket yang menjadi assignment-nya
+```
+
+---
+
+## Real-Time Audit Event
+
+Administrator dapat menerima event audit melalui:
+
+```http
+GET /ws/audit?token=<JWT>
+```
+
+Contoh event:
+
+```json
+{
+  "event": "audit_log",
+  "payload": {
+    "id": 1,
+    "user_id": 2,
+    "role": "cs",
+    "level": "HIGH",
+    "action": "JIT_REQUEST",
+    "ticket_id": 1,
+    "metadata": {},
+    "created_at": "..."
+  }
+}
+```
+
+Endpoint ini dibatasi untuk role Administrator.
+
+---
+
+# Audit Logging
+
+Audit log digunakan sebagai komponen pendukung untuk merekam aktivitas tertentu yang relevan terhadap proses kontrol akses.
+
+Contoh aktivitas:
+
+```text
+JIT_REQUEST
+VIEW_KYC
+RESET_PASSWORD
+CHANGE_EMAIL
+RESET_PIN
+UNBLOCK_ACCOUNT
+Access Denial
+```
+
+Log disimpan pada:
+
+```text
+audit_logs
+```
+
+dan dapat digunakan untuk membantu penelusuran proses pengujian dan aktivitas backend.
+
+Audit log pada prototipe ini tidak dimaksudkan sebagai implementasi sistem audit keamanan tingkat produksi atau tamper-resistant logging.
+
+---
+
+# Data Exposure Policy
+
+Akses terhadap data pengguna dibatasi berdasarkan konteks operasional.
+
+Contoh kebijakan yang diterapkan:
+
+* nomor telepon pada tampilan normal dapat dimasking;
+* informasi profil yang tersedia pada CS dibatasi sesuai kebutuhan ticket;
+* data KYC lengkap dikategorikan sebagai data sensitif;
+* akses `VIEW_KYC` membutuhkan session JIT yang valid.
+
+Contoh masking:
+
+```text
+0812****123
+```
+
+Pendekatan ini digunakan untuk merepresentasikan penerapan Least Privilege terhadap data sensitif pada layer aplikasi.
+
+---
+
+# Security Scope
+
+Prototipe dirancang untuk memverifikasi beberapa skenario pembatasan akses internal.
+
+| Scenario                                            | Control                 |
+| --------------------------------------------------- | ----------------------- |
+| User mengakses area internal                        | RBAC                    |
+| CS mengakses area Administrator                     | RBAC                    |
+| CS membuka ticket milik CS lain                     | Least Privilege         |
+| CS mengakses data tanpa konteks assignment          | Least Privilege         |
+| CS menjalankan fitur sensitif tanpa session         | JIT                     |
+| Session digunakan untuk feature berbeda             | JIT feature binding     |
+| Session digunakan setelah expired                   | JIT expiration          |
+| Session digunakan kembali setelah eksekusi          | Single-use JIT          |
+| Fitur dijalankan setelah konteks ticket tidak valid | Ticket + JIT validation |
+
+Kontrol tersebut digunakan untuk **membatasi dan memverifikasi skenario akses pada lingkungan prototipe**.
+
+Repositori ini tidak dimaksudkan untuk membuktikan bahwa sistem telah:
+
+* aman secara absolut;
+* memenuhi seluruh regulasi finansial;
+* siap untuk production deployment;
+* tahan terhadap seluruh bentuk serangan;
+* atau setara dengan sistem keamanan industri finansial.
+
+---
+
+# Testing Scope
+
+Evaluasi penelitian berfokus pada **backend enforcement** menggunakan pendekatan scenario-based dan black-box testing.
+
+Validasi terutama diamati melalui:
+
+```text
+HTTP response
+Access decision
+Database state
+JIT session state
+Audit / terminal log
+```
+
+Pengujian difokuskan untuk memverifikasi apakah implementasi berjalan sesuai rancangan.
+
+Pengujian penelitian tidak mencakup:
+
+```text
+Performance benchmark
+Load testing
+Penetration testing komprehensif
+Infrastructure security assessment
+Production readiness assessment
+```
+
+---
+
+# Research Context
+
+Implementasi dalam repositori ini menempatkan:
+
+```text
+RBAC
+↓
+sebagai batas awal berdasarkan role
+
+Least Privilege
+↓
+sebagai pembatas scope berdasarkan assignment ticket
+
+Just-In-Time Access
+↓
+sebagai pembatas akses sementara terhadap fitur sensitif
+```
+
+Kontribusi implementasi berada pada pemodelan dan verifikasi kombinasi kontrol akses tersebut pada **backend application layer** menggunakan konteks operasional Customer Support, ticket, data sensitif, fitur sensitif, dan session JIT.
+
+---
+
+# Repository
+
+```text
+https://github.com/SyukurGit/backend-skripsi
+```
+
+---
+
+## Author
+
+**Muhammad Syukur**
+Information Technology
+Faculty of Science and Technology
+UIN Ar-Raniry Banda Aceh
+2026
