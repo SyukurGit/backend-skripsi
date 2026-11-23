@@ -11,7 +11,7 @@ Repositori ini merupakan artefak implementasi dari penelitian:
 **Universitas:** UIN Ar-Raniry Banda Aceh<br>
 **Tahun:** 2026
 
-> **Catatan:** Sistem pada repositori ini merupakan **prototipe akademik** yang digunakan untuk merancang, mengimplementasikan, dan memverifikasi mekanisme kontrol akses. Sistem tidak ditujukan sebagai implementasi dompet digital komersial atau sebagai sistem yang siap digunakan pada lingkungan produksi.
+> **Catatan:** Sistem pada repositori ini merupakan **prototipe akademik / project demo** yang digunakan untuk merancang, mengimplementasikan, dan memverifikasi mekanisme kontrol akses. File `.env` pada repositori public ini **sengaja disertakan** sebagai konfigurasi contoh/demo agar mudah dijalankan; sistem tidak ditujukan sebagai implementasi dompet digital komersial atau siap pakai untuk lingkungan produksi.
 
 ---
 
